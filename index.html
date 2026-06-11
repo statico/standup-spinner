@@ -470,8 +470,50 @@
   }
   @keyframes pop { 0% { transform: scale(0.8); } 60% { transform: scale(1.1); } 100% { transform: scale(1); } }
 
-  /* confetti */
+  /* celebration canvas */
   #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 50; }
+
+  /* celebration overlay message */
+  #bigmsg {
+    position: fixed;
+    left: 50%; top: 38%;
+    transform: translate(-50%, -50%) scale(0.4);
+    z-index: 60;
+    pointer-events: none;
+    font-family: "Bungee", cursive;
+    font-size: clamp(2.2rem, 9vw, 6rem);
+    text-align: center;
+    white-space: nowrap;
+    opacity: 0;
+    color: var(--brass-bright);
+    text-shadow: 0 0 12px var(--brass-bright), 0 0 30px var(--brass), 0 6px 0 rgba(0,0,0,0.45);
+  }
+  #bigmsg.show { animation: bigpop 2.2s cubic-bezier(.2,.9,.2,1) forwards; }
+  #bigmsg.fire, #bigmsg.party {
+    color: var(--neon-glow);
+    text-shadow: 0 0 12px var(--neon), 0 0 34px var(--neon), 0 6px 0 rgba(0,0,0,0.45);
+  }
+  #bigmsg.star { color: #fff; text-shadow: 0 0 14px var(--brass-bright), 0 0 44px var(--brass); }
+  @keyframes bigpop {
+    0%   { opacity: 0; transform: translate(-50%,-50%) scale(0.4) rotate(-6deg); }
+    14%  { opacity: 1; transform: translate(-50%,-50%) scale(1.18) rotate(2deg); }
+    24%  { transform: translate(-50%,-50%) scale(1) rotate(0deg); }
+    78%  { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%,-50%) scale(1.12); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translate(0, 0); }
+    10% { transform: translate(-7px, 3px); }
+    20% { transform: translate(8px, -4px); }
+    30% { transform: translate(-9px, -2px); }
+    40% { transform: translate(7px, 4px); }
+    50% { transform: translate(-6px, 3px); }
+    60% { transform: translate(7px, -3px); }
+    70% { transform: translate(-5px, 2px); }
+    80% { transform: translate(5px, -2px); }
+    90% { transform: translate(-3px, 1px); }
+  }
+  .wrap.shake { animation: shake 0.65s ease; }
 
   .credit {
     text-align: center;
@@ -536,6 +578,7 @@
   </div>
 
   <canvas id="confetti"></canvas>
+  <div id="bigmsg"></div>
 
 <script>
 (() => {
@@ -752,6 +795,10 @@
     const line = reels.querySelector('.line[data-id="' + id + '"]');
     if (line) line.classList.toggle("done", val);
     updateProgress();
+    // the moment the LAST person is checked off, fire a random celebration
+    if (val && state.result.length > 0 && state.result.every((x) => x.done)) {
+      celebrate();
+    }
   }
 
   function updateProgress() {
@@ -906,12 +953,56 @@
       o.start(t); o.stop(t + 0.32);
     });
   }
+  function coinChime() {
+    const ctx = ac(); if (!ctx) return;
+    [784, 988, 1175, 1568].forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "square";
+      o.frequency.value = f;
+      const t = ctx.currentTime + i * 0.07;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.1, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t); o.stop(t + 0.24);
+    });
+  }
+  function whistle() {
+    const ctx = ac(); if (!ctx) return;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine";
+    const t = ctx.currentTime;
+    o.frequency.setValueAtTime(420, t);
+    o.frequency.exponentialRampToValueAtTime(1500, t + 0.3);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t); o.stop(t + 0.34);
+  }
+  function boom() {
+    const ctx = ac(); if (!ctx) return;
+    const dur = 0.4;
+    const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2);
+    }
+    const src = ctx.createBufferSource(); src.buffer = buffer;
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.22, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    src.connect(lp); lp.connect(g); g.connect(ctx.destination);
+    src.start();
+  }
 
-  // ---------- confetti ----------
+  // ---------- particle engine ----------
   const canvas = $("confetti");
   const cctx = canvas.getContext("2d");
-  let confetti = [];
-  let confRAF = null;
+  const bigmsg = $("bigmsg");
+  let parts = [];
+  let rafId = null;
   function sizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -919,48 +1010,241 @@
   window.addEventListener("resize", sizeCanvas);
   sizeCanvas();
 
-  function burstConfetti() {
-    const colors = ["#ffd479", "#ff2f5e", "#46e08a", "#f6ecd2", "#d9a441"];
-    for (let i = 0; i < 140; i++) {
-      confetti.push({
-        x: canvas.width / 2 + (Math.random() - 0.5) * 200,
-        y: canvas.height * 0.32,
-        vx: (Math.random() - 0.5) * 12,
-        vy: -Math.random() * 12 - 4,
-        g: 0.3 + Math.random() * 0.2,
-        size: 5 + Math.random() * 7,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        rot: Math.random() * Math.PI,
-        vr: (Math.random() - 0.5) * 0.3,
-        life: 0,
-      });
-    }
-    if (!confRAF) tickConfetti();
+  const PALETTE = ["#ffd479", "#ff2f5e", "#46e08a", "#f6ecd2", "#d9a441"];
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  function spawn(p) {
+    p.life = 0;
+    p.maxLife = p.maxLife || 400;
+    p.vx = p.vx || 0;
+    p.vy = p.vy || 0;
+    p.g = p.g == null ? 0.3 : p.g;
+    p.drag = p.drag == null ? 0.99 : p.drag;
+    p.rot = p.rot || 0;
+    p.vr = p.vr || 0;
+    parts.push(p);
+    if (!rafId) rafId = requestAnimationFrame(tick);
   }
-  function tickConfetti() {
+
+  function tick() {
     cctx.clearRect(0, 0, canvas.width, canvas.height);
-    confetti = confetti.filter((p) => p.y < canvas.height + 40 && p.life < 400);
-    confetti.forEach((p) => {
+    parts = parts.filter((p) => p.life < p.maxLife && p.y < canvas.height + 90);
+    for (const p of parts) {
       p.life++;
       p.vy += p.g;
+      p.vx *= p.drag;
+      p.vy *= p.drag;
       p.x += p.vx;
       p.y += p.vy;
-      p.vx *= 0.99;
       p.rot += p.vr;
-      cctx.save();
-      cctx.translate(p.x, p.y);
-      cctx.rotate(p.rot);
-      cctx.fillStyle = p.color;
-      cctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
-      cctx.restore();
-    });
-    if (confetti.length > 0) {
-      confRAF = requestAnimationFrame(tickConfetti);
+      drawPart(p);
+    }
+    if (parts.length > 0) {
+      rafId = requestAnimationFrame(tick);
     } else {
       cctx.clearRect(0, 0, canvas.width, canvas.height);
-      confRAF = null;
+      rafId = null;
     }
   }
+
+  function fadeAlpha(p) {
+    const t = p.life / p.maxLife; // fade out over the last 25% of life
+    return t > 0.75 ? Math.max(0, 1 - (t - 0.75) / 0.25) : 1;
+  }
+
+  function drawPart(p) {
+    cctx.save();
+    cctx.globalAlpha = (p.alpha != null ? p.alpha : 1) * fadeAlpha(p);
+    cctx.translate(p.x, p.y);
+    cctx.rotate(p.rot);
+    if (p.kind === "coin") {
+      const r = p.size;
+      cctx.scale(Math.max(0.16, Math.abs(Math.cos(p.life * 0.2 + p.phase))), 1); // fake spin
+      cctx.beginPath();
+      cctx.arc(0, 0, r, 0, Math.PI * 2);
+      cctx.fillStyle = "#ffcf3f";
+      cctx.fill();
+      cctx.lineWidth = Math.max(1, r * 0.18);
+      cctx.strokeStyle = "#a9760f";
+      cctx.stroke();
+      cctx.fillStyle = "#fff3c4";
+      cctx.font = "bold " + (r * 1.1) + "px Bungee, sans-serif";
+      cctx.textAlign = "center";
+      cctx.textBaseline = "middle";
+      cctx.fillText("$", 0, r * 0.06);
+    } else if (p.kind === "spark") {
+      cctx.beginPath();
+      cctx.arc(0, 0, p.size, 0, Math.PI * 2);
+      cctx.fillStyle = p.color;
+      cctx.shadowColor = p.color;
+      cctx.shadowBlur = 12;
+      cctx.fill();
+    } else if (p.kind === "glyph") {
+      cctx.font = "bold " + p.size + "px " + (p.font || "serif");
+      cctx.textAlign = "center";
+      cctx.textBaseline = "middle";
+      if (p.color) { cctx.fillStyle = p.color; cctx.shadowColor = p.color; cctx.shadowBlur = 10; }
+      cctx.fillText(p.char, 0, 0);
+    } else { // confetti rectangle
+      cctx.fillStyle = p.color;
+      cctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+    }
+    cctx.restore();
+  }
+
+  // small confetti pop used when the order is first drawn
+  function burstConfetti() {
+    for (let i = 0; i < 140; i++) {
+      spawn({
+        kind: "confetti",
+        x: canvas.width / 2 + rand(-100, 100),
+        y: canvas.height * 0.32,
+        vx: rand(-6, 6),
+        vy: rand(-16, -4),
+        g: rand(0.3, 0.5),
+        size: rand(5, 12),
+        color: pick(PALETTE),
+        rot: Math.random() * Math.PI,
+        vr: rand(-0.15, 0.15),
+        maxLife: 260,
+      });
+    }
+  }
+
+  // ---------- overlay + screen shake ----------
+  let bigmsgTimer = null;
+  function showBigMsg(text, theme) {
+    bigmsg.textContent = text;
+    bigmsg.className = "";
+    void bigmsg.offsetWidth; // reflow so the animation restarts
+    bigmsg.className = "show" + (theme ? " " + theme : "");
+    clearTimeout(bigmsgTimer);
+    bigmsgTimer = setTimeout(() => { bigmsg.className = ""; }, 2200);
+  }
+  function shake() {
+    const w = document.querySelector(".wrap");
+    w.classList.remove("shake");
+    void w.offsetWidth;
+    w.classList.add("shake");
+    setTimeout(() => w.classList.remove("shake"), 700);
+  }
+
+  // ---------- celebrations (one picked at random on completion) ----------
+  function fxCoinJackpot() {
+    showBigMsg("JACKPOT!");
+    shake();
+    coinChime();
+    const cx = canvas.width / 2;
+    const erupt = (n, delay) => setTimeout(() => {
+      for (let i = 0; i < n; i++) {
+        spawn({
+          kind: "coin",
+          x: cx + rand(-90, 90),
+          y: canvas.height + 20,
+          vx: rand(-9, 9),
+          vy: rand(-27, -16),
+          g: rand(0.55, 0.82),
+          drag: 0.995,
+          size: rand(10, 20),
+          phase: rand(0, 6),
+          vr: rand(-0.1, 0.1),
+          maxLife: 320,
+        });
+      }
+    }, delay);
+    erupt(45, 0); erupt(40, 170); erupt(30, 340);
+    setTimeout(() => { // a few also rain from above
+      for (let i = 0; i < 28; i++) spawn({
+        kind: "coin", x: rand(0, canvas.width), y: -20,
+        vy: rand(2, 6), g: 0.32, drag: 0.999,
+        size: rand(8, 16), phase: rand(0, 6), maxLife: 380,
+      });
+    }, 220);
+  }
+
+  function fxConfettiCannons() {
+    showBigMsg("🎉 NICE WORK 🎉", "party");
+    fanfare();
+    const shoot = (originX, dir) => {
+      for (let i = 0; i < 90; i++) spawn({
+        kind: "confetti",
+        x: originX, y: canvas.height + 10,
+        vx: dir * rand(3, 14) + rand(-2, 2),
+        vy: rand(-23, -10),
+        g: rand(0.32, 0.5),
+        size: rand(6, 13),
+        color: pick(PALETTE),
+        rot: Math.random() * Math.PI, vr: rand(-0.2, 0.2),
+        maxLife: 290,
+      });
+    };
+    shoot(40, 1); shoot(canvas.width - 40, -1);
+    setTimeout(() => { shoot(40, 1); shoot(canvas.width - 40, -1); }, 250);
+  }
+
+  function fxFireworks() {
+    showBigMsg("🎆 SHIP IT 🎆", "fire");
+    const colors = ["#ffd479", "#ff2f5e", "#46e08a", "#7ad0ff", "#f6ecd2", "#ff9f40"];
+    const burst = (x, y, color) => {
+      boom();
+      const n = 56;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const sp = rand(3, 8);
+        spawn({
+          kind: "spark", x, y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          g: 0.06, drag: 0.92,
+          size: rand(2, 4), color,
+          maxLife: rand(55, 85),
+        });
+      }
+    };
+    for (let k = 0; k < 6; k++) {
+      setTimeout(() => {
+        whistle();
+        burst(rand(canvas.width * 0.2, canvas.width * 0.8),
+              rand(canvas.height * 0.15, canvas.height * 0.5), pick(colors));
+      }, k * 340);
+    }
+  }
+
+  function fxStarShower() {
+    showBigMsg("🏆 CHAMPIONS 🏆", "star");
+    fanfare();
+    for (let i = 0; i < 90; i++) {
+      setTimeout(() => spawn({
+        kind: "glyph", char: "★", color: "#ffd479",
+        x: rand(0, canvas.width), y: rand(-40, -10),
+        vx: rand(-1, 1), vy: rand(1.5, 4),
+        g: 0.02, drag: 0.999,
+        size: rand(12, 28),
+        rot: rand(0, Math.PI), vr: rand(-0.05, 0.05),
+        maxLife: 360,
+      }), i * 18);
+    }
+  }
+
+  function fxEmojiParty() {
+    showBigMsg("🥳 STANDUP DONE 🥳", "party");
+    fanfare();
+    const emojis = ["🎉", "🥳", "🎊", "🍾", "⭐", "🙌", "🏁", "💥"];
+    for (let i = 0; i < 70; i++) {
+      spawn({
+        kind: "glyph", char: pick(emojis), font: "sans-serif",
+        x: canvas.width / 2 + rand(-70, 70), y: canvas.height * 0.52,
+        vx: rand(-11, 11), vy: rand(-21, -6),
+        g: rand(0.4, 0.6), drag: 0.995,
+        size: rand(22, 42),
+        rot: rand(-0.5, 0.5), vr: rand(-0.2, 0.2),
+        maxLife: 300,
+      });
+    }
+  }
+
+  const CELEBRATIONS = [fxCoinJackpot, fxConfettiCannons, fxFireworks, fxStarShower, fxEmojiParty];
+  function celebrate() { pick(CELEBRATIONS)(); }
 
   // ---------- events ----------
   addBtn.addEventListener("click", () => { addName(nameInput.value); nameInput.value = ""; nameInput.focus(); });
