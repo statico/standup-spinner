@@ -11,6 +11,8 @@ A single-page slot machine that picks your team's standup running order. Add you
 - Add, enable/disable, or remove team members
 - A slot-machine spin draws a random running order
 - Check people off as they go, with a progress bar to the finish
+- Per-person stats under each name: spins, times first, times last
+- Superlatives: who goes first most, who closes most, who shows up most
 - A random over-the-top celebration (coins, fireworks, confetti…) when the last person wraps up
 - Everything persists in your browser via `localStorage`
 

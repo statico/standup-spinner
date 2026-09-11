@@ -206,14 +206,24 @@
     background: rgba(0,0,0,0.22);
     border: 1px solid rgba(217,164,65,0.18);
     margin-bottom: 8px;
+    cursor: pointer;
     transition: opacity 0.2s, border-color 0.2s, background 0.2s;
   }
+  .roster-item:hover { border-color: rgba(217,164,65,0.45); }
   .roster-item.entering { animation: slidein 0.28s ease backwards; }
   @keyframes slidein {
     from { opacity: 0; transform: translateX(-12px); }
   }
   .roster-item.disabled { opacity: 0.4; }
-  .roster-item .name { flex: 1; font-size: 1.1rem; font-weight: 500; }
+  .roster-item .who { flex: 1; min-width: 0; }
+  .roster-item .name { font-size: 1.1rem; font-weight: 500; }
+  .roster-item .stat {
+    font-size: 0.7rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: rgba(217,164,65,0.7);
+    margin-top: 2px;
+  }
   .roster-item.disabled .name { text-decoration: line-through; }
 
   /* custom checkbox */
@@ -257,6 +267,18 @@
   }
   .del:hover { background: var(--neon); color: #fff; border-color: var(--neon); }
   .del:active { transform: scale(0.9); }
+
+  .superlatives {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed rgba(217,164,65,0.3);
+    display: grid;
+    gap: 6px;
+    font-size: 0.9rem;
+  }
+  .superlatives:empty { display: none; }
+  .superlatives .title { color: var(--brass); font-size: 0.7rem; letter-spacing: 1.5px; text-transform: uppercase; }
+  .superlatives .title strong { display: block; color: var(--cream); font-size: 1rem; letter-spacing: 0; text-transform: none; font-weight: 500; }
 
   .empty {
     text-align: center;
@@ -308,7 +330,7 @@
     padding: 6px 12px 6px 6px;
     transition: border-color 0.25s, background 0.25s, opacity 0.25s;
   }
-  .line.locked { border-color: var(--brass); box-shadow: 0 0 14px rgba(217,164,65,0.25); }
+  .line.locked { border-color: var(--brass); box-shadow: 0 0 14px rgba(217,164,65,0.25); cursor: pointer; }
   .line.done { opacity: 0.55; }
 
   .pos {
@@ -439,6 +461,7 @@
     padding: 0 18px;
   }
   .btn-reset:hover { border-color: var(--brass); color: var(--brass-bright); }
+  .btn-reset:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* progress bar */
   .progress {
@@ -549,6 +572,7 @@
           <button class="btn btn-add" id="addBtn">Add</button>
         </div>
         <ul id="rosterList"></ul>
+        <div class="superlatives" id="superlatives"></div>
       </section>
 
       <!-- RIGHT: machine -->
@@ -587,7 +611,7 @@
   const STORAGE_KEY = "standup-roulette-v1";
 
   // ---------- state ----------
-  /** @type {{roster: {id:string,name:string,enabled:boolean}[], result: {id:string,name:string,done:boolean}[]|null}} */
+  /** @type {{roster: {id:string,name:string,enabled:boolean}[], result: {id:string,name:string,done:boolean}[]|null, stats: Record<string,{spins:number,first:number,last:number}>}} */
   let state = load();
   let spinning = false;
 
@@ -599,10 +623,11 @@
         return {
           roster: Array.isArray(p.roster) ? p.roster : [],
           result: Array.isArray(p.result) ? p.result : null,
+          stats: p.stats && typeof p.stats === "object" ? p.stats : {},
         };
       }
     } catch (e) { /* ignore */ }
-    return { roster: [], result: null };
+    return { roster: [], result: null, stats: {} };
   }
 
   function save() {
@@ -621,6 +646,7 @@
   const addBtn = $("addBtn");
   const rosterList = $("rosterList");
   const rosterCount = $("rosterCount");
+  const superlatives = $("superlatives");
   const reels = $("reels");
   const spinBtn = $("spinBtn");
   const resetBtn = $("resetBtn");
@@ -642,11 +668,14 @@
     rosterList.appendChild(li);
     updateRosterCount();
     updateControls();
+    renderSuperlatives();
   }
 
   function deleteName(id) {
     state.roster = state.roster.filter((x) => x.id !== id);
+    delete state.stats[id];
     save();
+    renderSuperlatives();
     const li = rosterList.querySelector('.roster-item[data-id="' + id + '"]');
     if (li) li.remove();
     if (state.roster.length === 0) renderEmptyRoster();
@@ -690,9 +719,15 @@
     cb.title = p.enabled ? "Playing — click to bench" : "Benched — click to play";
     cb.addEventListener("change", () => toggleEnabled(p.id));
 
+    const who = document.createElement("div");
+    who.className = "who";
     const span = document.createElement("span");
     span.className = "name";
     span.textContent = p.name;
+    const stat = document.createElement("div");
+    stat.className = "stat";
+    stat.textContent = statText(p.id);
+    who.append(span, stat);
 
     const del = document.createElement("button");
     del.className = "del";
@@ -700,7 +735,12 @@
     del.title = "Remove";
     del.addEventListener("click", () => deleteName(p.id));
 
-    li.append(cb, span, del);
+    li.append(cb, who, del);
+    // the whole row toggles play/bench; the checkbox handles its own click, the × removes
+    li.addEventListener("click", (e) => {
+      if (e.target === cb || e.target.closest(".del")) return;
+      cb.click();
+    });
     return li;
   }
 
@@ -710,6 +750,44 @@
     li.className = "empty";
     li.textContent = "No players yet. Add your team above.";
     rosterList.appendChild(li);
+  }
+
+  function statText(id) {
+    const s = state.stats[id];
+    if (!s) return "No spins yet";
+    return s.spins + (s.spins === 1 ? " spin" : " spins") + " · first ×" + s.first + " · last ×" + s.last;
+  }
+
+  function updateStat(id) {
+    const el = rosterList.querySelector('.roster-item[data-id="' + id + '"] .stat');
+    if (el) el.textContent = statText(id);
+  }
+
+  // one line per stat naming the current leader(s); nothing shown until someone has a count
+  const SUPERLATIVES = [
+    ["🐦 Early bird", "first", "first"],
+    ["🏁 Closer", "last", "last"],
+    ["🎰 High roller", "spins", "spins"],
+  ];
+  function renderSuperlatives() {
+    superlatives.innerHTML = "";
+    SUPERLATIVES.forEach(([label, key, unit]) => {
+      let max = 0, names = [], played = 0;
+      state.roster.forEach((p) => {
+        const v = (state.stats[p.id] || {})[key] || 0;
+        if (v > 0) played++;
+        if (v > max) { max = v; names = [p.name]; }
+        else if (v === max && v > 0) names.push(p.name);
+      });
+      if (max === 0 || names.length === played) return; // nobody stands out yet
+      const row = document.createElement("div");
+      row.className = "title";
+      row.textContent = label + " · " + max + " " + unit;
+      const who = document.createElement("strong");
+      who.textContent = names.join(" & ");
+      row.appendChild(who);
+      superlatives.appendChild(row);
+    });
   }
 
   function updateRosterCount() {
@@ -735,6 +813,7 @@
   function updateControls() {
     const n = enabledNames().length;
     spinBtn.disabled = spinning || n < 2;
+    resetBtn.disabled = spinning;
     spinBtn.textContent = spinning ? "Spinning…" : (state.result ? "Re-spin" : "Spin");
     // decorative header/button animations only run in the cleared "ready to roll?" state
     document.body.classList.toggle("ready", state.result === null && !spinning);
@@ -783,6 +862,10 @@
     done.addEventListener("change", () => toggleDone(r.id, done.checked));
 
     line.append(badge, win, done);
+    line.addEventListener("click", (e) => {
+      if (e.target === done || !line.classList.contains("locked")) return;
+      done.click();
+    });
     return line;
   }
 
@@ -911,7 +994,16 @@
   function finishSpin(order) {
     spinning = false;
     state.result = order;
+    order.forEach((r, i) => {
+      if (!state.roster.some((p) => p.id === r.id)) return; // removed mid-spin
+      const s = state.stats[r.id] || (state.stats[r.id] = { spins: 0, first: 0, last: 0 });
+      s.spins++;
+      if (i === 0) s.first++;
+      if (i === order.length - 1) s.last++;
+    });
     save();
+    order.forEach((r) => updateStat(r.id));
+    renderSuperlatives();
     updateControls();
     updateProgress();
     fanfare();
@@ -1269,6 +1361,7 @@
 
   // ---------- init ----------
   renderRoster();
+  renderSuperlatives();
   renderResult();
   updateControls();
 })();
