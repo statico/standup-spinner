@@ -216,6 +216,26 @@
   }
   #rosterList .roster-item { margin-bottom: 0; }
   #rosterList .empty { grid-column: 1 / -1; }
+  #rosterList,
+  .reels {
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--brass) rgba(0, 0, 0, 0.45);
+  }
+  #rosterList::-webkit-scrollbar,
+  .reels::-webkit-scrollbar { width: 10px; }
+  #rosterList::-webkit-scrollbar-track,
+  .reels::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: 999px;
+  }
+  #rosterList::-webkit-scrollbar-thumb,
+  .reels::-webkit-scrollbar-thumb {
+    background: var(--brass-dark);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
   .roster-item {
     display: flex;
     align-items: center;
