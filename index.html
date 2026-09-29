@@ -465,24 +465,6 @@
   }
 
   /* ---------- casino idle motion: only in the cleared "ready to roll?" state ---------- */
-  /* chasing marquee lights around the machine */
-  .reels-frame::after {
-    content: "";
-    position: absolute;
-    inset: -11px;
-    border-radius: 26px;
-    padding: 5px;
-    pointer-events: none;
-    opacity: 0;
-    background: radial-gradient(circle, var(--brass-bright) 0 2.5px, transparent 3.5px) 0 0 / 16px 16px;
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-    filter: drop-shadow(0 0 4px var(--brass-bright));
-    transition: opacity 0.4s;
-  }
-  body.ready .reels-frame::after { opacity: 1; animation: marquee 0.5s steps(1) infinite; }
-  @keyframes marquee { 50% { background-position: 8px 8px; } }
   body.ready .reels-frame .stars { animation: twinkle 1.2s steps(1) infinite; }
   @keyframes twinkle { 50% { color: var(--neon-glow); border-color: var(--neon); text-shadow: 0 0 8px var(--neon); } }
   body.ready .placeholder-msg .big { animation: neonblink 1.6s steps(1) infinite; }
