@@ -285,11 +285,12 @@
   .check:checked::after {
     content: "";
     position: absolute;
-    left: 6px; top: 2px;
+    /* pseudo-elements skip the * border-box rule; the visible L sits ~2px below the rotated box center */
+    left: 50%; top: calc(50% - 2px);
     width: 6px; height: 11px;
     border: solid var(--ink);
     border-width: 0 3px 3px 0;
-    transform: rotate(45deg);
+    transform: translate(-50%, -50%) rotate(45deg);
   }
 
   .del {
@@ -437,10 +438,10 @@
   .line .done-check:checked { background: var(--win); box-shadow: 0 0 12px rgba(70,224,138,0.7); }
   .line .done-check:checked::after {
     content: "";
-    position: absolute; left: 9px; top: 4px;
+    position: absolute; left: 50%; top: calc(50% - 2.5px);
     width: 7px; height: 13px;
     border: solid var(--ink); border-width: 0 3px 3px 0;
-    transform: rotate(45deg);
+    transform: translate(-50%, -50%) rotate(45deg);
   }
   .line.done .reel-cell { text-decoration: line-through; color: rgba(246,236,210,0.5); text-shadow: none; }
 
@@ -722,6 +723,8 @@
     const li = makeRosterItem(p);
     li.classList.add("entering"); // play the slide-in once, for the new row only
     rosterList.appendChild(li);
+    popAt(li, GOOD, 24);
+    blip(660, 1320, "triangle", 0.14);
     updateRosterCount();
     updateControls();
     renderSuperlatives();
@@ -733,7 +736,9 @@
     save();
     renderSuperlatives();
     const li = rosterList.querySelector('.roster-item[data-id="' + id + '"]');
-    if (li) li.remove();
+    if (li) { popAt(li, BAD, 30); li.remove(); }
+    boom();
+    blip(300, 80, "sawtooth", 0.2, 0.06);
     if (state.roster.length === 0) renderEmptyRoster();
     updateRosterCount();
     updateControls();
@@ -756,6 +761,8 @@
     }
     updateRosterCount();
     updateControls();
+    if (li) popAt(li.querySelector(".check"), p.enabled ? GOOD : BAD, p.enabled ? 18 : 10);
+    if (p.enabled) blip(520, 880, "triangle", 0.12); else blip(420, 200, "sine", 0.15);
   }
 
   function enabledNames() {
@@ -934,6 +941,15 @@
     const line = reels.querySelector('.line[data-id="' + id + '"]');
     if (line) line.classList.toggle("done", val);
     updateProgress();
+    if (line) {
+      const n = state.result.filter((x) => x.done).length;
+      if (val) {
+        popAt(line.querySelector(".done-check"), GOOD, 26);
+        blip(440 * Math.pow(2, n / state.result.length), 1760, "square", 0.1, 0.06); // climbs as the team finishes
+      } else {
+        blip(500, 250, "sine", 0.12);
+      }
+    }
     // the moment the LAST person is checked off, fire a random celebration
     if (val && state.result.length > 0 && state.result.every((x) => x.done)) {
       celebrate();
@@ -1144,6 +1160,20 @@
     src.connect(lp); lp.connect(g); g.connect(ctx.destination);
     src.start();
   }
+  // short pitch-sliding tone for UI clicks
+  function blip(from, to, type, dur, vol) {
+    const ctx = ac(); if (!ctx) return;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    const t = ctx.currentTime;
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(from, t);
+    o.frequency.exponentialRampToValueAtTime(to, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol || 0.12, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
 
   // ---------- particle engine ----------
   const canvas = $("confetti");
@@ -1259,6 +1289,27 @@
       });
     }
   }
+
+  // radial spark + confetti pop centered on a clicked element
+  function popAt(el, colors, n) {
+    const r = el.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(2, 7);
+      const spark = i % 2 === 0;
+      spawn({
+        kind: spark ? "spark" : "confetti", x, y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2,
+        g: spark ? 0.08 : 0.25, drag: 0.93,
+        size: spark ? rand(1.5, 3.5) : rand(4, 8),
+        color: pick(colors),
+        rot: Math.random() * Math.PI, vr: rand(-0.3, 0.3),
+        maxLife: rand(35, 60),
+      });
+    }
+  }
+  const GOOD = ["#46e08a", "#ffd479", "#f6ecd2"];
+  const BAD = ["#ff2f5e", "#ff9f40", "#8a8a8a"];
 
   // ---------- overlay + screen shake ----------
   let bigmsgTimer = null;
@@ -1399,8 +1450,12 @@
   nameInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { addName(nameInput.value); nameInput.value = ""; }
   });
-  spinBtn.addEventListener("click", spin);
+  spinBtn.addEventListener("click", () => {
+    if (!spinning) { popAt(spinBtn, PALETTE, 30); blip(180, 60, "sawtooth", 0.25, 0.08); }
+    spin();
+  });
   resetBtn.addEventListener("click", () => {
+    if (state.result) { popAt(resetBtn, BAD, 16); blip(900, 150, "sine", 0.3, 0.08); }
     state.result = null;
     save();
     renderResult();
