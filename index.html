@@ -351,8 +351,9 @@
     display: flex;
     flex-direction: column;
   }
-  .reels-frame::before {
-    content: "★ ★ ★";
+  .reels-frame .stars {
+    z-index: 2;
+    cursor: pointer;
     position: absolute;
     top: -13px; left: 50%; transform: translateX(-50%);
     background: var(--felt-2);
@@ -461,6 +462,52 @@
     display: block;
     margin-bottom: 8px;
     letter-spacing: 1px;
+  }
+
+  /* ---------- casino idle motion: only in the cleared "ready to roll?" state ---------- */
+  /* chasing marquee lights around the machine */
+  .reels-frame::after {
+    content: "";
+    position: absolute;
+    inset: -11px;
+    border-radius: 26px;
+    padding: 5px;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(circle, var(--brass-bright) 0 2.5px, transparent 3.5px) 0 0 / 16px 16px;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    filter: drop-shadow(0 0 4px var(--brass-bright));
+    transition: opacity 0.4s;
+  }
+  body.ready .reels-frame::after { opacity: 1; animation: marquee 0.5s steps(1) infinite; }
+  @keyframes marquee { 50% { background-position: 8px 8px; } }
+  body.ready .reels-frame .stars { animation: twinkle 1.2s steps(1) infinite; }
+  @keyframes twinkle { 50% { color: var(--neon-glow); border-color: var(--neon); text-shadow: 0 0 8px var(--neon); } }
+  body.ready .placeholder-msg .big { animation: neonblink 1.6s steps(1) infinite; }
+  @keyframes neonblink {
+    0%, 60% { color: var(--brass-bright); text-shadow: 0 0 10px var(--brass), 0 0 24px rgba(217,164,65,0.6); }
+    61%, 100% { color: var(--neon); text-shadow: 0 0 10px var(--neon), 0 0 24px rgba(255,47,94,0.6); }
+  }
+  body.ready .btn-spin:not(:disabled) { animation: throb 1.4s ease-in-out infinite; }
+  @keyframes throb { 50% { transform: scale(1.025); filter: brightness(1.12); } }
+
+  /* one-shot easter-egg animations, restarted by flash(); !important so they beat the
+     idle loops (body.ready .bulb, body.ready h1) and the sticky .entering slide-in */
+  .bulb, h1 .ltr, .tagline, .credit, .panel-title { cursor: pointer; }
+  h1 .ltr { display: inline-block; }
+  .bulbs, .tagline { position: relative; z-index: 1; } /* Monoton glyphs overflow the title and would swallow their clicks */
+  .zap { animation: zap 0.35s ease-out !important; }
+  @keyframes zap { 40% { transform: scale(1.7); filter: brightness(2); box-shadow: 0 0 18px #fff, 0 0 36px var(--brass-bright); } }
+  .boing { animation: boing 0.5s cubic-bezier(.3,1.6,.5,1) !important; }
+  @keyframes boing { 30% { transform: translateY(-14px) rotate(-8deg) scale(1.15); } 60% { transform: translateY(3px) scaleY(0.9); } }
+  .hop { animation: hop 0.35s ease-out !important; }
+  @keyframes hop { 40% { transform: translateY(-6px); border-color: var(--brass-bright); } }
+  h1.tilt { animation: tilt 1.6s linear !important; }
+  @keyframes tilt {
+    0%, 8%, 16%, 30% { opacity: 1; } 4%, 12%, 22% { opacity: 0.15; }
+    34%, 85% { opacity: 0.08; filter: grayscale(1); } 88% { opacity: 0.6; } 91% { opacity: 0.1; } 100% { opacity: 1; }
   }
 
   /* ---------- lever / spin ---------- */
@@ -638,6 +685,7 @@
       <!-- RIGHT: machine -->
       <section class="machine">
         <div class="reels-frame">
+          <div class="stars">★ ★ ★</div>
           <div class="reels" id="reels">
             <div class="placeholder-msg">
               <span class="big">Ready to roll?</span>
@@ -1296,7 +1344,9 @@
   // radial spark + confetti pop centered on a clicked element
   function popAt(el, colors, n) {
     const r = el.getBoundingClientRect();
-    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    burstAt(r.left + r.width / 2, r.top + r.height / 2, colors, n);
+  }
+  function burstAt(x, y, colors, n) {
     for (let i = 0; i < n; i++) {
       const a = rand(0, Math.PI * 2), sp = rand(2, 7);
       const spark = i % 2 === 0;
@@ -1447,6 +1497,170 @@
 
   const CELEBRATIONS = [fxCoinJackpot, fxConfettiCannons, fxFireworks, fxStarShower, fxEmojiParty];
   function celebrate() { pick(CELEBRATIONS)(); }
+
+  // ---------- easter eggs (all click-triggered; nothing here runs on its own) ----------
+  // restart a one-shot CSS animation class
+  function flash(el, cls) {
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+    el.addEventListener("animationend", () => el.classList.remove(cls), { once: true });
+  }
+
+  // bulbs are a xylophone; play them left to right for an encore
+  const NOTES = [523, 587, 659, 784, 880, 1047, 1175];
+  const bulbs = [...document.querySelectorAll(".bulb")];
+  let bulbRun = 0;
+  bulbs.forEach((b, i) => b.addEventListener("click", () => {
+    blip(NOTES[i], NOTES[i] * 1.01, "triangle", 0.3, 0.12);
+    popAt(b, ["#ffd479", "#fff3c4"], 10);
+    flash(b, "zap");
+    bulbRun = i === bulbRun ? bulbRun + 1 : (i === 0 ? 1 : 0);
+    if (bulbRun === bulbs.length) {
+      bulbRun = 0;
+      setTimeout(() => {
+        showBigMsg("🎵 ENCORE 🎵", "star");
+        fanfare();
+        bulbs.forEach((x, k) => setTimeout(() => { flash(x, "zap"); popAt(x, PALETTE, 12); }, k * 70));
+      }, 250);
+    }
+  }));
+
+  // title letters boing; mash them and the sign tilts
+  const h1 = document.querySelector("h1");
+  h1.setAttribute("aria-label", h1.textContent);
+  (function split(el) {
+    [...el.childNodes].forEach((n) => {
+      if (n.nodeType !== Node.TEXT_NODE) return split(n);
+      const frag = document.createDocumentFragment();
+      for (const ch of n.textContent) {
+        if (ch === " ") { frag.append(" "); continue; }
+        const l = document.createElement("span");
+        l.className = "ltr";
+        l.setAttribute("aria-hidden", "true");
+        l.textContent = ch;
+        frag.append(l);
+      }
+      n.replaceWith(frag);
+    });
+  })(h1);
+  let mash = [];
+  h1.addEventListener("click", (e) => {
+    const l = e.target.closest(".ltr");
+    if (!l || h1.classList.contains("tilt")) return;
+    flash(l, "boing");
+    blip(rand(700, 1100), 90, "sawtooth", 0.15, 0.05); // neon buzz
+    popAt(l, l.closest(".alt") ? ["#ffd479", "#fff3c4"] : ["#ff2f5e", "#ff7aa0"], 12);
+    const now = Date.now();
+    mash = mash.filter((t) => now - t < 2000).concat(now);
+    if (mash.length >= 7) {
+      mash = [];
+      h1.classList.add("tilt");
+      h1.addEventListener("animationend", () => h1.classList.remove("tilt"), { once: true });
+      boom();
+      shake();
+      showBigMsg("⚡ TILT ⚡", "fire");
+      h1.querySelectorAll(".ltr").forEach((x) => {
+        const r = x.getBoundingClientRect();
+        for (let k = 0; k < 4; k++) spawn({
+          kind: "spark", x: r.left + r.width / 2, y: r.bottom,
+          vx: rand(-2, 2), vy: rand(-3, 1), g: 0.35, drag: 0.98,
+          size: rand(1.5, 3), color: pick(["#fff3c4", "#7ad0ff", "#ffd479"]), maxLife: 70,
+        });
+      });
+      setTimeout(() => blip(60, 120, "sawtooth", 0.4, 0.08), 1350); // hum as it relights
+    }
+  });
+
+  // tagline and footer cycle through quips
+  function cycler(el, lines, sound) {
+    let i = 0;
+    el.addEventListener("click", () => {
+      i = (i + 1) % lines.length;
+      el.textContent = lines[i];
+      flash(el, "boing");
+      popAt(el, PALETTE, 14);
+      sound();
+    });
+  }
+  cycler(document.querySelector(".tagline"), [
+    "Place your bets · who goes first?",
+    "The house always wins · keep it short",
+    "No refunds on blockers",
+    "Ante up · updates only",
+    "Double down on yesterday's ticket",
+    "Cash out before the hour",
+  ], coinChime);
+  cycler(document.querySelector(".credit"), [
+    "Pull the lever · settle the running order",
+    "🔮 Your blocker clears itself by Thursday",
+    "🔮 A forgotten PR gets approved today",
+    "🔮 Someone says \"quick one\" and it isn't",
+    "🔮 The flaky test passes on the first try",
+    "🔮 You will be on mute when it's your turn",
+  ], () => blip(1500, 2400, "sine", 0.18, 0.08));
+
+  // the star badge sheds stars
+  const stars = document.querySelector(".stars");
+  stars.addEventListener("click", () => {
+    const r = stars.getBoundingClientRect();
+    for (let i = 0; i < 18; i++) spawn({
+      kind: "glyph", char: "★", color: pick(["#ffd479", "#ff7aa0", "#fff3c4"]),
+      x: r.left + r.width / 2, y: r.top + r.height / 2,
+      vx: rand(-6, 6), vy: rand(-9, -2), g: 0.3, drag: 0.98,
+      size: rand(10, 20), vr: rand(-0.2, 0.2), maxLife: 110,
+    });
+    [1319, 1568, 1976].forEach((f, i) => setTimeout(() => blip(f, f, "sine", 0.12, 0.06), i * 60));
+  });
+
+  // the roster title does the wave
+  document.querySelector(".panel-title").addEventListener("click", (e) => {
+    if (e.target.closest(".count")) return;
+    rosterList.querySelectorAll(".roster-item").forEach((li, i) => setTimeout(() => {
+      flash(li, "hop");
+      blip(NOTES[i % 7] * (i >= 7 ? 2 : 1), NOTES[i % 7] * 1.02, "triangle", 0.12, 0.05);
+    }, i * 45));
+  });
+
+  // the felt deals card suits; every 13th click is lucky
+  let feltClicks = 0;
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("button, input, li, .line, .bulb, h1, .tagline, .credit, .stars, .panel-title")) return;
+    feltClicks++;
+    blip(2200, 900, "square", 0.04, 0.05);
+    setTimeout(() => blip(1800, 800, "square", 0.04, 0.04), 50); // chip clack
+    for (let i = 0; i < 6; i++) {
+      const suit = pick(["♠", "♥", "♦", "♣"]);
+      spawn({
+        kind: "glyph", char: suit, color: suit === "♥" || suit === "♦" ? "#ff2f5e" : "#f6ecd2",
+        x: e.clientX, y: e.clientY,
+        vx: rand(-5, 5), vy: rand(-9, -3), g: 0.35, drag: 0.98,
+        size: rand(14, 24), vr: rand(-0.2, 0.2), maxLife: 90,
+      });
+    }
+    if (feltClicks % 13 === 0) {
+      showBigMsg("🍀 LUCKY 13 🍀", "star");
+      coinChime();
+      for (let i = 0; i < 30; i++) spawn({
+        kind: "coin", x: e.clientX, y: e.clientY,
+        vx: rand(-7, 7), vy: rand(-16, -6), g: 0.6, drag: 0.99,
+        size: rand(8, 14), phase: rand(0, 6), maxLife: 200,
+      });
+    }
+  });
+
+  // up up down down left right left right b a
+  const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+  let konami = 0;
+  document.addEventListener("keydown", (e) => {
+    if (e.target.matches("input")) return;
+    konami = e.key === KONAMI[konami] ? konami + 1 : (e.key === KONAMI[0] ? 1 : 0);
+    if (konami === KONAMI.length) {
+      konami = 0;
+      fxCoinJackpot();
+      showBigMsg("🕹️ 30 FREE SPINS 🕹️");
+    }
+  });
 
   // ---------- events ----------
   addBtn.addEventListener("click", () => { addName(nameInput.value); nameInput.value = ""; nameInput.focus(); });
