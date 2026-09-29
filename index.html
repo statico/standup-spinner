@@ -33,7 +33,10 @@
     height: 100dvh;
     overflow: hidden;
     position: relative;
+    -webkit-user-select: none;
+    user-select: none;
   }
+  input[type="text"] { -webkit-user-select: text; user-select: text; }
 
   /* felt noise + vignette */
   body::before {
