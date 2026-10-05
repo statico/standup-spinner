@@ -725,8 +725,21 @@
     catch (e) { /* ignore */ }
   }
 
+  // uniform integer in [0, n) from the CSPRNG; rejection sampling avoids modulo bias
+  function randInt(n) {
+    const limit = 0x100000000 - (0x100000000 % n);
+    const buf = new Uint32Array(1);
+    do crypto.getRandomValues(buf); while (buf[0] >= limit);
+    return buf[0] % n;
+  }
+
+  // uniform float in [0, 1) from the CSPRNG, for the confetti
+  function randFloat() {
+    return crypto.getRandomValues(new Uint32Array(1))[0] / 0x100000000;
+  }
+
   function uid() {
-    return "id-" + Math.random().toString(36).slice(2, 9) + "-" + (++uid._c);
+    return "id-" + randInt(0x7fffffff).toString(36) + "-" + (++uid._c);
   }
   uid._c = 0;
 
@@ -1014,7 +1027,7 @@
   function shuffle(arr) {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = randInt(i + 1);
       [a[i], a[j]] = [a[j], a[i]];
     }
     return a;
@@ -1046,7 +1059,7 @@
       for (let k = 0; k < reelLen; k++) {
         const cell = document.createElement("div");
         cell.className = "reel-cell";
-        cell.textContent = pool[Math.floor(Math.random() * pool.length)];
+        cell.textContent = pool[randInt(pool.length)];
         strip.appendChild(cell);
       }
       const target = document.createElement("div");
@@ -1183,7 +1196,7 @@
     const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < data.length; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2);
+      data[i] = (randFloat() * 2 - 1) * Math.pow(1 - i / data.length, 2);
     }
     const src = ctx.createBufferSource(); src.buffer = buffer;
     const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900;
@@ -1222,8 +1235,8 @@
   sizeCanvas();
 
   const PALETTE = ["#ffd479", "#ff2f5e", "#46e08a", "#f6ecd2", "#d9a441"];
-  const rand = (a, b) => a + Math.random() * (b - a);
-  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const rand = (a, b) => a + randFloat() * (b - a);
+  const pick = (arr) => arr[randInt(arr.length)];
 
   function spawn(p) {
     p.life = 0;
@@ -1316,7 +1329,7 @@
         g: rand(0.3, 0.5),
         size: rand(5, 12),
         color: pick(PALETTE),
-        rot: Math.random() * Math.PI,
+        rot: randFloat() * Math.PI,
         vr: rand(-0.15, 0.15),
         maxLife: 260,
       });
@@ -1409,7 +1422,7 @@
         g: rand(0.32, 0.5),
         size: rand(6, 13),
         color: pick(PALETTE),
-        rot: Math.random() * Math.PI, vr: rand(-0.2, 0.2),
+        rot: randFloat() * Math.PI, vr: rand(-0.2, 0.2),
         maxLife: 290,
       });
     };
